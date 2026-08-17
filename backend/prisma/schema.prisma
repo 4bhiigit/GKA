@@ -1,0 +1,55 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite" // Change to "postgresql" if using PostgreSQL
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String       @id @default(cuid())
+  githubId     String       @unique
+  username     String
+  name         String?
+  email        String?
+  avatarUrl    String?
+  accessToken  String       // User's personal GitHub OAuth token
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  repositories Repository[]
+}
+
+model Repository {
+  id             String   @id @default(cuid())
+  userId         String?
+  user           User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  githubUrl      String   @unique
+  owner          String
+  name           String
+  defaultBranch  String   @default("main")
+  description    String?
+  isPrivate      Boolean  @default(false)
+  status         String   @default("pending") // pending | indexing | ready | failed
+  progress       Float    @default(0)         // 0 to 100%
+  progressStage  String   @default("Pending")
+  errorMessage   String?
+  fileCount      Int      @default(0)
+  chunkCount     Int      @default(0)
+  languages      String?  // JSON stringified object of language counts
+  summary        String?  // Architecture summary cached
+  fileTree       String?  // JSON stringified repository file tree for UI explorer
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  chats          Chat[]
+}
+
+model Chat {
+  id           String     @id @default(cuid())
+  repositoryId String
+  repository   Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  role         String     // "user" | "assistant" | "system"
+  content      String
+  sourceFiles  String?    // JSON stringified array of cited files and line ranges
+  createdAt    DateTime   @default(now())
+}

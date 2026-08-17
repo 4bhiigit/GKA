@@ -76,13 +76,15 @@ export class AuthController {
 
       const userData = userResponse.data;
 
+      const avatar = userData.avatar_url || `https://github.com/${userData.login}.png`;
+
       // 3. Upsert user in database
       const user = await prisma.user.upsert({
         where: { githubId: String(userData.id) },
         update: {
           username: userData.login,
           name: userData.name || userData.login,
-          avatarUrl: userData.avatar_url,
+          avatarUrl: avatar,
           email: userData.email || undefined,
           accessToken: access_token,
         },
@@ -90,7 +92,7 @@ export class AuthController {
           githubId: String(userData.id),
           username: userData.login,
           name: userData.name || userData.login,
-          avatarUrl: userData.avatar_url,
+          avatarUrl: avatar,
           email: userData.email || undefined,
           accessToken: access_token,
         },
@@ -102,7 +104,7 @@ export class AuthController {
           githubId: user.githubId,
           username: user.username,
           name: user.name,
-          avatarUrl: user.avatarUrl,
+          avatarUrl: user.avatarUrl || `https://github.com/${user.username}.png`,
           email: user.email,
         },
         token: user.id,
@@ -145,7 +147,12 @@ export class AuthController {
         return;
       }
 
-      res.json({ user });
+      res.json({
+        user: {
+          ...user,
+          avatarUrl: user.avatarUrl || `https://github.com/${user.username}.png`,
+        },
+      });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

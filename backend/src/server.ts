@@ -61,9 +61,19 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   });
 });
 
+import fs from 'fs';
+import path from 'path';
+import { execSync } from 'child_process';
+
 // Start Server
 const startServer = async () => {
   try {
+    // Ensure SQLite database directory exists if using SQLite
+    const prismaDir = path.resolve(__dirname, '../prisma');
+    if (!fs.existsSync(prismaDir)) {
+      fs.mkdirSync(prismaDir, { recursive: true });
+    }
+
     // Initialize Vector Store
     await VectorStoreService.init();
 

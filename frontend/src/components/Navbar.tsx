@@ -21,29 +21,19 @@ const UserAvatar: React.FC<{ username: string; avatarUrl?: string; className?: s
   avatarUrl,
   className = 'w-6 h-6',
 }) => {
-  const [hasError, setHasError] = useState(false);
-  const primarySrc = avatarUrl && avatarUrl.startsWith('http')
-    ? avatarUrl
-    : `https://avatars.githubusercontent.com/${username}`;
-
-  if (hasError || !username) {
-    return (
-      <div
-        className={`${className} rounded-full bg-gradient-to-tr from-zinc-800 to-zinc-700 border border-zinc-600 flex items-center justify-center text-white text-[10px] font-bold shrink-0 shadow-inner`}
-      >
-        {username ? username.slice(0, 2).toUpperCase() : 'GH'}
-      </div>
-    );
-  }
+  const imgSrc = avatarUrl || `https://avatars.githubusercontent.com/${username}`;
 
   return (
     <img
-      src={primarySrc}
+      src={imgSrc}
       alt={username}
-      referrerPolicy="no-referrer"
-      crossOrigin="anonymous"
-      className={`${className} rounded-full border border-zinc-750 object-cover bg-zinc-800 shrink-0`}
-      onError={() => setHasError(true)}
+      className={`${className} rounded-full border border-zinc-700 object-cover bg-zinc-800 shrink-0`}
+      onError={(e) => {
+        const target = e.target as HTMLImageElement;
+        if (!target.src.includes('github.com')) {
+          target.src = `https://github.com/${username}.png`;
+        }
+      }}
     />
   );
 };

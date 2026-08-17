@@ -114,13 +114,13 @@ export async function fetchRepoFile(
 ): Promise<RepoFileContent> {
   const language = detectLanguageFromPath(filePath);
 
-  // 1. Direct GitHub Raw CDN First (instant 30-80ms response without backend cold start!)
+  // 1. jsDelivr Global Edge CDN (100% unblocked globally, sub-50ms latency)
   if (owner && repoName) {
     try {
-      const rawUrl = `https://raw.githubusercontent.com/${owner}/${repoName}/${branch}/${filePath}`;
-      const rawRes = await fetch(rawUrl);
-      if (rawRes.ok) {
-        const text = await rawRes.text();
+      const jsDelivrUrl = `https://cdn.jsdelivr.net/gh/${owner}/${repoName}@${branch}/${filePath}`;
+      const cdnRes = await fetch(jsDelivrUrl);
+      if (cdnRes.ok) {
+        const text = await cdnRes.text();
         return {
           path: filePath,
           content: text,
@@ -130,15 +130,39 @@ export async function fetchRepoFile(
           isBinary: false,
         };
       }
-    } catch (rawErr) {
-      console.warn('Direct GitHub Raw fetch failed, attempting backend API:', rawErr);
+    } catch (cdnErr) {
+      console.warn('jsDelivr CDN fetch error, falling back:', cdnErr);
     }
   }
 
-  // 2. Try Backend API endpoint (with 3.5s timeout for private repos / fallback)
+  // 2. Direct GitHub REST API (always unblocked, works on public and token-authenticated repos)
+  if (owner && repoName) {
+    try {
+      const apiUrl = `https://api.github.com/repos/${owner}/${repoName}/contents/${encodeURIComponent(filePath).replace(/%2F/g, '/')}?ref=${encodeURIComponent(branch)}`;
+      const apiRes = await fetch(apiUrl);
+      if (apiRes.ok) {
+        const data = await apiRes.json();
+        if (data && data.content && data.encoding === 'base64') {
+          const decoded = atob(data.content.replace(/\n/g, ''));
+          return {
+            path: filePath,
+            content: decoded,
+            size: data.size || decoded.length,
+            encoding: 'utf-8',
+            language,
+            isBinary: false,
+          };
+        }
+      }
+    } catch (apiErr) {
+      console.warn('GitHub API fetch error, falling back:', apiErr);
+    }
+  }
+
+  // 3. Backend API Endpoint (with 3s timeout)
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3500);
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
 
     const params = new URLSearchParams({ path: filePath });
     if (branch) params.append('ref', branch);

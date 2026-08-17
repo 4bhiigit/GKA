@@ -67,16 +67,11 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({
           setFileData(data);
           const lang = data.language || detectLanguageFromPath(filePath);
 
-          if (!data.isBinary) {
-            highlightCodeWithLines(data.content, lang, highlightLines).then((lines) => {
-              if (!isCancelled) {
-                setHighlightedLines(lines);
-                setIsLoading(false);
-              }
-            });
-          } else {
-            setIsLoading(false);
+          if (!data.isBinary && typeof data.content === 'string') {
+            const lines = highlightCodeWithLines(data.content, lang, highlightLines);
+            setHighlightedLines(lines);
           }
+          setIsLoading(false);
         }
       })
       .catch((err: any) => {
@@ -94,15 +89,14 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({
     return () => {
       isCancelled = true;
     };
-  }, [repoId, filePath, defaultBranch, userId]);
+  }, [repoId, filePath, defaultBranch, userId, owner, repoName]);
 
   // 2. Re-highlight if highlightLines range changes
   useEffect(() => {
     if (fileData && !fileData.isBinary && fileData.content) {
       const lang = fileData.language || detectLanguageFromPath(filePath);
-      highlightCodeWithLines(fileData.content, lang, highlightLines).then((lines) => {
-        setHighlightedLines(lines);
-      });
+      const lines = highlightCodeWithLines(fileData.content, lang, highlightLines);
+      setHighlightedLines(lines);
     }
   }, [highlightLines, fileData, filePath]);
 

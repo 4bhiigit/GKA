@@ -68,11 +68,11 @@ export interface HighlightedLine {
 /**
  * Ultra-fast synchronous code highlighter with line numbers and highlighted line markers (0ms latency)
  */
-export async function highlightCodeWithLines(
+export function highlightCodeWithLines(
   code: string,
   lang: string,
   highlightRange?: [number, number]
-): Promise<HighlightedLine[]> {
+): HighlightedLine[] {
   const rawLines = code.split('\n');
   const [startLine, endLine] = highlightRange || [0, 0];
   const grammar = Prism.languages[lang] || Prism.languages.javascript || Prism.languages.markup;

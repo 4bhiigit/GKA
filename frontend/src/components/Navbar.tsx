@@ -137,19 +137,19 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div className="relative">
               <button
                 onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                className="flex items-center gap-2 p-1 rounded-lg hover:bg-zinc-900 border border-zinc-800 transition-colors"
+                className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-zinc-900 border border-zinc-800 transition-colors"
               >
-                {user.avatarUrl ? (
-                  <img
-                    src={user.avatarUrl}
-                    alt={user.username}
-                    className="w-6 h-6 rounded-full border border-zinc-700 object-cover"
-                  />
-                ) : (
-                  <div className="w-6 h-6 rounded-full bg-zinc-800 flex items-center justify-center text-white text-[10px]">
-                    {user.username.slice(0, 2).toUpperCase()}
-                  </div>
-                )}
+                <img
+                  src={user.avatarUrl || `https://github.com/${user.username}.png`}
+                  alt={user.username}
+                  className="w-5 h-5 rounded-full border border-zinc-700 object-cover bg-zinc-800"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    if (!target.src.includes(`github.com/${user.username}.png`)) {
+                      target.src = `https://github.com/${user.username}.png`;
+                    }
+                  }}
+                />
                 <span className="text-xs font-medium text-zinc-200 hidden md:inline max-w-[100px] truncate">
                   {user.username}
                 </span>

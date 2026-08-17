@@ -248,6 +248,74 @@ export class RepoController {
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
+  /**
+   * GET /api/repos/:id/file
+   * Fetch specific raw file content and metadata from GitHub
+   */
+  public static async getRepoFile(req: Request, res: Response): Promise<void> {
+    try {
+      const id = String(req.params.id);
+      const filePath = String(req.query.path || '');
+      const refQuery = req.query.ref as string | undefined;
+
+      if (!filePath) {
+        res.status(400).json({ error: 'File path query parameter (?path=...) is required' });
+        return;
+      }
+
+      const repo = await prisma.repository.findUnique({
+        where: { id },
+        include: { user: true },
+      });
+
+      if (!repo) {
+        res.status(404).json({ error: 'Repository not found' });
+        return;
+      }
+
+      const branch = refQuery || repo.defaultBranch || 'main';
+      const userToken = repo.user?.accessToken || undefined;
+
+      try {
+        const fileDetails = await GitHubService.fetchFileWithDetails(
+          repo.owner,
+          repo.name,
+          branch,
+          filePath,
+          userToken
+        );
+
+        res.json(fileDetails);
+      } catch (err: any) {
+        const status = err.response?.status;
+        if (status === 404) {
+          res.status(404).json({
+            error: 'File not found. This file may have been moved, renamed, or deleted on GitHub.',
+            code: 'FILE_NOT_FOUND',
+          });
+          return;
+        }
+        if (status === 403) {
+          res.status(403).json({
+            error: 'GitHub API rate limit exceeded or access forbidden.',
+            code: 'RATE_LIMIT_OR_FORBIDDEN',
+            resetAt: err.response?.headers?.['x-ratelimit-reset'],
+          });
+          return;
+        }
+        if (status === 401) {
+          res.status(401).json({
+            error: 'GitHub OAuth token has expired or is invalid. Please reconnect your GitHub account.',
+            code: 'UNAUTHORIZED',
+          });
+          return;
+        }
+
+        res.status(500).json({ error: err.message || 'Failed to fetch file content from GitHub' });
+      }
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
   }
 
   /**

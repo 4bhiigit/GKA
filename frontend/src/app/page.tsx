@@ -6,8 +6,9 @@ import { RepoImporter } from '../components/RepoImporter';
 import { RepoList } from '../components/RepoList';
 import { ChatInterface } from '../components/ChatInterface';
 import { FileTreeExplorer } from '../components/FileTreeExplorer';
-import { CitationViewer } from '../components/CitationViewer';
 import { ArchitectureModal } from '../components/ArchitectureModal';
+import { CodeViewer } from '../components/CodeViewer/CodeViewer';
+import { CodeViewerTabs, CodeTab } from '../components/CodeViewer/CodeViewerTabs';
 import { Repository, Citation, FileNode, ChatMessage, User } from '../lib/types';
 import { fetchRepos, fetchRepoFiles, fetchChatHistory, deleteRepository, fetchCurrentUser } from '../lib/api';
 import {
@@ -22,6 +23,9 @@ import {
   ShieldCheck,
   FileCode,
   Terminal,
+  Code2,
+  ChevronLeft,
+  X,
 } from 'lucide-react';
 
 export default function Home() {
@@ -36,8 +40,58 @@ export default function Home() {
   const [selectedProvider, setSelectedProvider] = useState<'groq' | 'gemini'>('groq');
   const [isImporterOpen, setIsImporterOpen] = useState(false);
   const [isArchModalOpen, setIsArchModalOpen] = useState(false);
-  const [selectedCitation, setSelectedCitation] = useState<Citation | null>(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  // In-App Code Viewer & Multi-File Tabs State
+  const [codeTabs, setCodeTabs] = useState<CodeTab[]>([]);
+  const [activeCodeTabPath, setActiveCodeTabPath] = useState<string | null>(null);
+  const [isCodeViewerExpanded, setIsCodeViewerExpanded] = useState(false);
+  const [isMobileCodeViewerOpen, setIsMobileCodeViewerOpen] = useState(false);
+
+  // Open file in Code Viewer (with optional line range highlight)
+  const openFileInCodeViewer = (filePath: string, highlightLines?: [number, number]) => {
+    setCodeTabs((prev) => {
+      const existingIndex = prev.findIndex((t) => t.path === filePath);
+      if (existingIndex !== -1) {
+        const updated = [...prev];
+        if (highlightLines) {
+          updated[existingIndex] = { ...updated[existingIndex], highlightLines };
+        }
+        return updated;
+      }
+      // Cap at 8 tabs by removing the oldest inactive tab
+      const nextTabs = prev.length >= 8 ? prev.slice(1) : prev;
+      return [...nextTabs, { path: filePath, highlightLines }];
+    });
+    setActiveCodeTabPath(filePath);
+
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      setIsMobileCodeViewerOpen(true);
+    }
+  };
+
+  const handleCloseTab = (filePath: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCodeTabs((prev) => {
+      const updated = prev.filter((t) => t.path !== filePath);
+      if (activeCodeTabPath === filePath) {
+        const nextActive = updated.length > 0 ? updated[updated.length - 1].path : null;
+        setActiveCodeTabPath(nextActive);
+        if (!nextActive) {
+          setIsMobileCodeViewerOpen(false);
+        }
+      }
+      return updated;
+    });
+  };
+
+  const handleCloseAllTabs = () => {
+    setCodeTabs([]);
+    setActiveCodeTabPath(null);
+    setIsMobileCodeViewerOpen(false);
+  };
+
+  const activeCodeTab = codeTabs.find((t) => t.path === activeCodeTabPath) || null;
 
   // Check login on mount (non-blocking)
   useEffect(() => {
@@ -305,22 +359,30 @@ export default function Home() {
           <div className="flex-1 flex overflow-hidden relative">
             {/* Left Sidebar: Repository File Tree (Collapsible) */}
             <div
-              className={`transition-all duration-200 ease-in-out border-r border-zinc-800 z-20 ${
+              className={`transition-all duration-200 ease-in-out border-r border-zinc-800 z-20 shrink-0 ${
                 isSidebarCollapsed ? 'w-0 overflow-hidden' : 'w-60 sm:w-64'
               }`}
             >
               <FileTreeExplorer
                 files={files}
                 onSelectFile={(filePath) => {
-                  console.log('Selected file:', filePath);
+                  openFileInCodeViewer(filePath);
                 }}
               />
             </div>
 
-            {/* Center: Chat Interface */}
-            <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+            {/* Center / Left Pane: Chat Interface */}
+            <main
+              className={`flex flex-col min-w-0 overflow-hidden relative transition-all duration-200 ${
+                codeTabs.length > 0 && activeCodeTab && !isCodeViewerExpanded
+                  ? 'w-full lg:w-1/2 flex-1 border-r border-zinc-800'
+                  : isCodeViewerExpanded
+                  ? 'hidden'
+                  : 'flex-1'
+              }`}
+            >
               {/* Top Sub-Bar */}
-              <div className="px-3.5 py-1.5 bg-[#09090b] border-b border-zinc-800 flex items-center justify-between text-xs">
+              <div className="px-3.5 py-1.5 bg-[#09090b] border-b border-zinc-800 flex items-center justify-between text-xs shrink-0">
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
@@ -338,7 +400,22 @@ export default function Home() {
                   </span>
                 </div>
 
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-2">
+                  {/* Mobile open code viewer button */}
+                  {codeTabs.length > 0 && (
+                    <button
+                      onClick={() => {
+                        if (activeCodeTabPath) {
+                          setIsMobileCodeViewerOpen(true);
+                        }
+                      }}
+                      className="flex lg:hidden items-center gap-1 px-2 py-0.5 rounded text-amber-300 bg-amber-500/10 border border-amber-500/20 text-[11px]"
+                    >
+                      <Code2 className="w-3 h-3" />
+                      <span>Code ({codeTabs.length})</span>
+                    </button>
+                  )}
+
                   <button
                     onClick={() => setActiveTab('dashboard')}
                     className="flex items-center gap-1 px-2 py-0.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors text-[11px]"
@@ -356,13 +433,97 @@ export default function Home() {
                   repository={activeRepo}
                   initialMessages={chatHistory}
                   selectedProvider={selectedProvider}
-                  onCitationClick={(citation) => setSelectedCitation(citation)}
+                  onCitationClick={(citation) => {
+                    openFileInCodeViewer(citation.filePath, [citation.startLine, citation.endLine]);
+                  }}
                 />
               </div>
             </main>
+
+            {/* Right Pane: In-App Code Viewer (Desktop Split-Pane) */}
+            {codeTabs.length > 0 && activeCodeTab && (
+              <aside
+                className={`hidden lg:flex flex-col overflow-hidden relative transition-all duration-200 ${
+                  isCodeViewerExpanded ? 'flex-1 w-full' : 'w-1/2 flex-1'
+                }`}
+              >
+                <CodeViewerTabs
+                  tabs={codeTabs}
+                  activeTabPath={activeCodeTabPath}
+                  onSelectTab={(path) => setActiveCodeTabPath(path)}
+                  onCloseTab={handleCloseTab}
+                  onCloseAll={handleCloseAllTabs}
+                />
+                <div className="flex-1 overflow-hidden">
+                  <CodeViewer
+                    key={`${activeRepo.id}:${activeCodeTab.path}`}
+                    repoId={activeRepo.id}
+                    owner={activeRepo.owner}
+                    repoName={activeRepo.name}
+                    defaultBranch={activeRepo.defaultBranch}
+                    filePath={activeCodeTab.path}
+                    highlightLines={activeCodeTab.highlightLines}
+                    githubUrl={activeRepo.githubUrl}
+                    userId={user?.id}
+                    onClose={() => handleCloseTab(activeCodeTab.path, { stopPropagation: () => {} } as any)}
+                    isExpanded={isCodeViewerExpanded}
+                    onToggleExpand={() => setIsCodeViewerExpanded(!isCodeViewerExpanded)}
+                  />
+                </div>
+              </aside>
+            )}
           </div>
         )}
       </div>
+
+      {/* Mobile Full-Screen Code Viewer Modal */}
+      {isMobileCodeViewerOpen && activeCodeTab && activeRepo && (
+        <div className="fixed inset-0 z-50 bg-[#090a0f] flex flex-col lg:hidden animate-fade-in">
+          <div className="flex items-center justify-between px-3 py-2 bg-zinc-950 border-b border-zinc-800 shrink-0">
+            <button
+              onClick={() => setIsMobileCodeViewerOpen(false)}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-zinc-300 hover:text-white bg-zinc-900 border border-zinc-800"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              <span>Back to Chat</span>
+            </button>
+
+            <span className="text-xs font-mono text-zinc-400 truncate max-w-[160px]">
+              {activeCodeTab.path.split('/').pop()}
+            </span>
+
+            <button
+              onClick={() => setIsMobileCodeViewerOpen(false)}
+              className="p-1.5 rounded-lg text-zinc-400 hover:text-white bg-zinc-900 border border-zinc-800"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <CodeViewerTabs
+            tabs={codeTabs}
+            activeTabPath={activeCodeTabPath}
+            onSelectTab={(path) => setActiveCodeTabPath(path)}
+            onCloseTab={handleCloseTab}
+            onCloseAll={handleCloseAllTabs}
+          />
+
+          <div className="flex-1 overflow-hidden">
+            <CodeViewer
+              key={`mobile:${activeRepo.id}:${activeCodeTab.path}`}
+              repoId={activeRepo.id}
+              owner={activeRepo.owner}
+              repoName={activeRepo.name}
+              defaultBranch={activeRepo.defaultBranch}
+              filePath={activeCodeTab.path}
+              highlightLines={activeCodeTab.highlightLines}
+              githubUrl={activeRepo.githubUrl}
+              userId={user?.id}
+              onClose={() => setIsMobileCodeViewerOpen(false)}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Import Modal */}
       <RepoImporter
@@ -382,14 +543,6 @@ export default function Home() {
           initialSummary={activeRepo.summary}
         />
       )}
-
-      {/* Citation Snippet Inspector Drawer */}
-      <CitationViewer
-        citation={selectedCitation}
-        onClose={() => setSelectedCitation(null)}
-        repoUrl={activeRepo?.githubUrl}
-        defaultBranch={activeRepo?.defaultBranch}
-      />
     </div>
   );
 }

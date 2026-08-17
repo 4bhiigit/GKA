@@ -36,6 +36,7 @@ router.get('/repos/:id', RepoController.getRepo);
 router.get('/repos/:id/status', RepoController.getRepoStatus);
 router.get('/repos/:id/status/stream', RepoController.getRepoStatusStream);
 router.get('/repos/:id/files', RepoController.getRepoFiles);
+router.get('/repos/:id/file', RepoController.getRepoFile);
 router.post('/repos/:id/summary', RepoController.getSummary);
 router.delete('/repos/:id', RepoController.deleteRepo);
 

@@ -229,6 +229,195 @@ export class GitHubService {
     return '';
   }
 
+  private static fileDetailsCache = new Map<string, { data: any; expiresAt: number }>();
+
+  /**
+   * Check if file is a binary/media format
+   */
+  public static isBinaryFile(filePath: string): boolean {
+    const binaryExtensions = new Set([
+      'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'ico', 'svg',
+      'pdf', 'zip', 'tar', 'gz', '7z', 'rar',
+      'exe', 'dll', 'so', 'dylib', 'wasm',
+      'mp3', 'mp4', 'wav', 'ogg', 'mov', 'avi',
+      'woff', 'woff2', 'ttf', 'eot', 'otf',
+      'db', 'sqlite', 'sqlite3', 'bin', 'iso',
+    ]);
+    const ext = filePath.split('.').pop()?.toLowerCase() || '';
+    return binaryExtensions.has(ext);
+  }
+
+  /**
+   * Detect programming language from file path extension
+   */
+  public static detectLanguage(filePath: string): string {
+    const ext = filePath.split('.').pop()?.toLowerCase() || '';
+    const map: Record<string, string> = {
+      ts: 'typescript',
+      tsx: 'tsx',
+      js: 'javascript',
+      jsx: 'jsx',
+      py: 'python',
+      go: 'go',
+      rs: 'rust',
+      java: 'java',
+      c: 'c',
+      cpp: 'cpp',
+      h: 'c',
+      hpp: 'cpp',
+      cs: 'csharp',
+      rb: 'ruby',
+      php: 'php',
+      html: 'html',
+      htm: 'html',
+      css: 'css',
+      scss: 'scss',
+      sass: 'sass',
+      less: 'less',
+      json: 'json',
+      yaml: 'yaml',
+      yml: 'yaml',
+      md: 'markdown',
+      markdown: 'markdown',
+      sql: 'sql',
+      sh: 'shell',
+      bash: 'shell',
+      zsh: 'shell',
+      dockerfile: 'dockerfile',
+      env: 'shell',
+      toml: 'toml',
+      xml: 'xml',
+      graphql: 'graphql',
+      gql: 'graphql',
+      prisma: 'prisma',
+    };
+    return map[ext] || 'text';
+  }
+
+  /**
+   * Fetch detailed file metadata and content with caching and error reporting
+   */
+  public static async fetchFileWithDetails(
+    owner: string,
+    repo: string,
+    branch: string,
+    filePath: string,
+    customToken?: string
+  ): Promise<{
+    path: string;
+    content: string;
+    size: number;
+    encoding: string;
+    language: string;
+    sha?: string;
+    isBinary: boolean;
+  }> {
+    const cacheKey = `${owner}/${repo}/${branch}:${filePath}`;
+    const cached = this.fileDetailsCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.data;
+    }
+
+    const isBinary = this.isBinaryFile(filePath);
+    const language = this.detectLanguage(filePath);
+
+    if (isBinary) {
+      const result = {
+        path: filePath,
+        content: '',
+        size: 0,
+        encoding: 'binary',
+        language,
+        isBinary: true,
+      };
+      this.fileDetailsCache.set(cacheKey, { data: result, expiresAt: Date.now() + 5 * 60 * 1000 });
+      return result;
+    }
+
+    try {
+      // 1. Try Contents API first
+      const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(filePath).replace(/%2F/g, '/')}?ref=${encodeURIComponent(branch)}`;
+      const apiRes = await axios.get(apiUrl, {
+        headers: this.getHeaders(customToken),
+        timeout: 10000,
+      });
+
+      const data = apiRes.data;
+
+      // If file content is returned inline in base64
+      if (data && data.content && data.encoding === 'base64') {
+        const decodedContent = Buffer.from(data.content, 'base64').toString('utf-8');
+        const result = {
+          path: filePath,
+          content: decodedContent,
+          size: data.size || decodedContent.length,
+          encoding: 'utf-8',
+          language,
+          sha: data.sha,
+          isBinary: false,
+        };
+        this.fileDetailsCache.set(cacheKey, { data: result, expiresAt: Date.now() + 5 * 60 * 1000 });
+        return result;
+      }
+
+      // If file > 1MB, GitHub returns size and sha without content; use Git Blobs API
+      if (data && data.sha) {
+        const blobRes = await axios.get(`https://api.github.com/repos/${owner}/${repo}/git/blobs/${data.sha}`, {
+          headers: this.getHeaders(customToken),
+          timeout: 12000,
+        });
+        if (blobRes.data && blobRes.data.content && blobRes.data.encoding === 'base64') {
+          const decodedContent = Buffer.from(blobRes.data.content, 'base64').toString('utf-8');
+          const result = {
+            path: filePath,
+            content: decodedContent,
+            size: blobRes.data.size || decodedContent.length,
+            encoding: 'utf-8',
+            language,
+            sha: data.sha,
+            isBinary: false,
+          };
+          this.fileDetailsCache.set(cacheKey, { data: result, expiresAt: Date.now() + 5 * 60 * 1000 });
+          return result;
+        }
+      }
+
+      // 2. Fallback to Raw CDN
+      const rawContent = await this.fetchFileContent(owner, repo, branch, filePath, customToken);
+      const result = {
+        path: filePath,
+        content: rawContent,
+        size: rawContent.length,
+        encoding: 'utf-8',
+        language,
+        isBinary: false,
+      };
+      this.fileDetailsCache.set(cacheKey, { data: result, expiresAt: Date.now() + 5 * 60 * 1000 });
+      return result;
+    } catch (err: any) {
+      // Try Raw CDN as fallback before throwing error
+      try {
+        const rawContent = await this.fetchFileContent(owner, repo, branch, filePath, customToken);
+        if (rawContent) {
+          const result = {
+            path: filePath,
+            content: rawContent,
+            size: rawContent.length,
+            encoding: 'utf-8',
+            language,
+            isBinary: false,
+          };
+          this.fileDetailsCache.set(cacheKey, { data: result, expiresAt: Date.now() + 5 * 60 * 1000 });
+          return result;
+        }
+      } catch {
+        // Continue to throw main error
+      }
+
+      throw err;
+    }
+  }
+
   /**
    * Helper to build a clean JSON file tree hierarchy for frontend UI
    */

@@ -78,3 +78,15 @@ export interface FileNode {
   size?: number;
   children?: FileNode[];
 }
+
+export interface RepoFileContent {
+  path: string;
+  content: string;
+  size: number;
+  encoding: string;
+  language: string;
+  sha?: string;
+  isBinary: boolean;
+  error?: string;
+  code?: string;
+}

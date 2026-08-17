@@ -1,4 +1,4 @@
-import { Repository, IngestionProgress, FileNode, ChatMessage, Citation, User, GitHubUserRepo } from './types';
+import { Repository, IngestionProgress, FileNode, ChatMessage, Citation, User, GitHubUserRepo, RepoFileContent } from './types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
@@ -102,6 +102,29 @@ export async function fetchRepoFiles(id: string): Promise<FileNode[]> {
   if (!res.ok) throw new Error('Failed to fetch files');
   const data = await res.json();
   return data.files || [];
+}
+
+export async function fetchRepoFile(
+  id: string,
+  filePath: string,
+  branch?: string,
+  userId?: string
+): Promise<RepoFileContent> {
+  const params = new URLSearchParams({ path: filePath });
+  if (branch) params.append('ref', branch);
+
+  const res = await fetch(`${API_BASE}/repos/${id}/file?${params.toString()}`, {
+    headers: getAuthHeaders(userId),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    const error: any = new Error(data.error || 'Failed to fetch file content');
+    error.status = res.status;
+    error.code = data.code;
+    throw error;
+  }
+  return data;
 }
 
 export async function fetchRepoSummary(id: string): Promise<string> {

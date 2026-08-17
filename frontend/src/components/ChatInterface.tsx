@@ -23,6 +23,41 @@ import {
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
+import { CitationBadge } from './CitationBadge';
+
+const renderTextWithCitations = (text: string, onCitationClick: (c: Citation) => void) => {
+  const citationRegex = /\[([a-zA-Z0-9_\-./]+\.[a-zA-Z0-9]+):(\d+)(?:-(\d+))?\]/g;
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = citationRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.substring(lastIndex, match.index));
+    }
+    const filePath = match[1];
+    const startLine = parseInt(match[2], 10);
+    const endLine = match[3] ? parseInt(match[3], 10) : startLine;
+
+    parts.push(
+      <CitationBadge
+        key={`cite_${match.index}_${filePath}`}
+        filePath={filePath}
+        startLine={startLine}
+        endLine={endLine}
+        onClick={onCitationClick}
+      />
+    );
+    lastIndex = citationRegex.lastIndex;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(text.substring(lastIndex));
+  }
+
+  return parts.length > 0 ? parts : text;
+};
+
 interface ChatInterfaceProps {
   repository: Repository;
   initialMessages?: ChatMessage[];
@@ -320,6 +355,48 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
                       components={{
+                        p({ children }) {
+                          if (typeof children === 'string') {
+                            return <p>{renderTextWithCitations(children, onCitationClick)}</p>;
+                          }
+                          if (Array.isArray(children)) {
+                            return (
+                              <p>
+                                {children.map((child, cIdx) =>
+                                  typeof child === 'string' ? (
+                                    <React.Fragment key={cIdx}>
+                                      {renderTextWithCitations(child, onCitationClick)}
+                                    </React.Fragment>
+                                  ) : (
+                                    child
+                                  )
+                                )}
+                              </p>
+                            );
+                          }
+                          return <p>{children}</p>;
+                        },
+                        li({ children }) {
+                          if (typeof children === 'string') {
+                            return <li>{renderTextWithCitations(children, onCitationClick)}</li>;
+                          }
+                          if (Array.isArray(children)) {
+                            return (
+                              <li>
+                                {children.map((child, cIdx) =>
+                                  typeof child === 'string' ? (
+                                    <React.Fragment key={cIdx}>
+                                      {renderTextWithCitations(child, onCitationClick)}
+                                    </React.Fragment>
+                                  ) : (
+                                    child
+                                  )
+                                )}
+                              </li>
+                            );
+                          }
+                          return <li>{children}</li>;
+                        },
                         code({ node, inline, className, children, ...props }: any) {
                           const match = /language-(\w+)/.exec(className || '');
                           const codeString = String(children).replace(/\n$/, '');
@@ -375,17 +452,15 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                       <FileCode className="w-3 h-3 text-zinc-400" />
                       <span>Verified Citations ({message.sourceFiles.length})</span>
                     </div>
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="flex flex-wrap gap-1">
                       {message.sourceFiles.map((citation, cIdx) => (
-                        <button
+                        <CitationBadge
                           key={cIdx}
-                          onClick={() => onCitationClick(citation)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-mono bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-500 text-zinc-300 hover:text-white transition-all active:scale-95 shadow-sm"
-                          title={`Inspect ${citation.filePath} (Lines ${citation.startLine}-${citation.endLine})`}
-                        >
-                          <span className="truncate max-w-[140px]">{citation.filePath.split('/').pop()}</span>
-                          <span className="text-zinc-500">:L{citation.startLine}-{citation.endLine}</span>
-                        </button>
+                          filePath={citation.filePath}
+                          startLine={citation.startLine}
+                          endLine={citation.endLine}
+                          onClick={onCitationClick}
+                        />
                       ))}
                     </div>
                   </div>

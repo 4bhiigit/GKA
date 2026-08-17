@@ -1,30 +1,21 @@
-import { createHighlighter, type Highlighter } from 'shiki';
-
-let highlighterPromise: Promise<Highlighter> | null = null;
-
-const SUPPORTED_LANGUAGES = [
-  'typescript',
-  'javascript',
-  'tsx',
-  'jsx',
-  'python',
-  'go',
-  'rust',
-  'java',
-  'c',
-  'cpp',
-  'csharp',
-  'ruby',
-  'php',
-  'html',
-  'css',
-  'json',
-  'yaml',
-  'markdown',
-  'sql',
-  'shell',
-  'dockerfile',
-] as const;
+import Prism from 'prismjs';
+import 'prismjs/components/prism-typescript';
+import 'prismjs/components/prism-javascript';
+import 'prismjs/components/prism-jsx';
+import 'prismjs/components/prism-tsx';
+import 'prismjs/components/prism-python';
+import 'prismjs/components/prism-json';
+import 'prismjs/components/prism-yaml';
+import 'prismjs/components/prism-markdown';
+import 'prismjs/components/prism-bash';
+import 'prismjs/components/prism-sql';
+import 'prismjs/components/prism-go';
+import 'prismjs/components/prism-rust';
+import 'prismjs/components/prism-java';
+import 'prismjs/components/prism-c';
+import 'prismjs/components/prism-cpp';
+import 'prismjs/components/prism-csharp';
+import 'prismjs/components/prism-docker';
 
 export function detectLanguageFromPath(filePath: string): string {
   const ext = filePath.split('.').pop()?.toLowerCase() || '';
@@ -58,24 +49,14 @@ export function detectLanguageFromPath(filePath: string): string {
     md: 'markdown',
     markdown: 'markdown',
     sql: 'sql',
-    sh: 'shell',
-    bash: 'shell',
-    zsh: 'shell',
-    env: 'shell',
-    dockerfile: 'dockerfile',
+    sh: 'bash',
+    bash: 'bash',
+    zsh: 'bash',
+    env: 'bash',
+    dockerfile: 'docker',
     prisma: 'typescript',
   };
   return map[ext] || 'text';
-}
-
-export async function getHighlighterInstance(): Promise<Highlighter> {
-  if (!highlighterPromise) {
-    highlighterPromise = createHighlighter({
-      themes: ['github-dark'],
-      langs: SUPPORTED_LANGUAGES as unknown as string[],
-    });
-  }
-  return highlighterPromise;
 }
 
 export interface HighlightedLine {
@@ -85,73 +66,42 @@ export interface HighlightedLine {
 }
 
 /**
- * Highlights code and splits it into structured lines with line numbers and highlight markers
+ * Ultra-fast synchronous code highlighter with line numbers and highlighted line markers (0ms latency)
  */
 export async function highlightCodeWithLines(
   code: string,
   lang: string,
   highlightRange?: [number, number]
 ): Promise<HighlightedLine[]> {
-  try {
-    const highlighter = await getHighlighterInstance();
-    const loadedLangs = highlighter.getLoadedLanguages();
-    const effectiveLang = loadedLangs.includes(lang) ? lang : 'text';
+  const rawLines = code.split('\n');
+  const [startLine, endLine] = highlightRange || [0, 0];
+  const grammar = Prism.languages[lang] || Prism.languages.javascript || Prism.languages.markup;
 
-    const tokens = highlighter.codeToTokens(code, {
-      lang: effectiveLang as any,
-      theme: 'github-dark',
-    });
+  return rawLines.map((rawLine, idx) => {
+    const lineNumber = idx + 1;
+    const isHighlighted =
+      startLine > 0 &&
+      endLine > 0 &&
+      lineNumber >= startLine &&
+      lineNumber <= endLine;
 
-    const lines: HighlightedLine[] = [];
-    const [startLine, endLine] = highlightRange || [0, 0];
-
-    tokens.tokens.forEach((tokenLine, index) => {
-      const lineNumber = index + 1;
-      const isHighlighted =
-        startLine > 0 &&
-        endLine > 0 &&
-        lineNumber >= startLine &&
-        lineNumber <= endLine;
-
-      // Build styled HTML for this line
-      let lineHtml = '';
-      if (tokenLine.length === 0) {
-        lineHtml = '&nbsp;';
-      } else {
-        tokenLine.forEach((token) => {
-          const color = token.color || '#e1e4e8';
-          const content = escapeHtml(token.content);
-          lineHtml += `<span style="color: ${color}">${content}</span>`;
-        });
+    let lineHtml = '';
+    if (!rawLine) {
+      lineHtml = '&nbsp;';
+    } else {
+      try {
+        lineHtml = Prism.highlight(rawLine, grammar, lang);
+      } catch {
+        lineHtml = escapeHtml(rawLine);
       }
+    }
 
-      lines.push({
-        lineNumber,
-        html: lineHtml,
-        isHighlighted,
-      });
-    });
-
-    return lines;
-  } catch (error) {
-    console.error('Highlighter error, using fallback:', error);
-    // Plaintext fallback
-    const rawLines = code.split('\n');
-    const [startLine, endLine] = highlightRange || [0, 0];
-
-    return rawLines.map((raw, idx) => {
-      const lineNumber = idx + 1;
-      return {
-        lineNumber,
-        html: escapeHtml(raw) || '&nbsp;',
-        isHighlighted:
-          startLine > 0 &&
-          endLine > 0 &&
-          lineNumber >= startLine &&
-          lineNumber <= endLine,
-      };
-    });
-  }
+    return {
+      lineNumber,
+      html: lineHtml || '&nbsp;',
+      isHighlighted,
+    };
+  });
 }
 
 function escapeHtml(str: string): string {

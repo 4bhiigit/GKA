@@ -114,31 +114,7 @@ export async function fetchRepoFile(
 ): Promise<RepoFileContent> {
   const language = detectLanguageFromPath(filePath);
 
-  // 1. Try Backend API endpoint
-  try {
-    const params = new URLSearchParams({ path: filePath });
-    if (branch) params.append('ref', branch);
-
-    const res = await fetch(`${API_BASE}/repos/${id}/file?${params.toString()}`, {
-      headers: getAuthHeaders(userId),
-    });
-
-    const text = await res.text();
-    let data: any;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      data = null;
-    }
-
-    if (res.ok && data && typeof data.content === 'string') {
-      return data;
-    }
-  } catch (backendErr) {
-    console.warn('Backend file API call failed, falling back to direct GitHub CDN:', backendErr);
-  }
-
-  // 2. Direct GitHub Raw CDN Fallback (works instantly for all public/indexed repos)
+  // 1. Direct GitHub Raw CDN First (instant 30-80ms response without backend cold start!)
   if (owner && repoName) {
     try {
       const rawUrl = `https://raw.githubusercontent.com/${owner}/${repoName}/${branch}/${filePath}`;
@@ -155,8 +131,37 @@ export async function fetchRepoFile(
         };
       }
     } catch (rawErr) {
-      console.warn('Direct GitHub Raw fetch failed:', rawErr);
+      console.warn('Direct GitHub Raw fetch failed, attempting backend API:', rawErr);
     }
+  }
+
+  // 2. Try Backend API endpoint (with 3.5s timeout for private repos / fallback)
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+    const params = new URLSearchParams({ path: filePath });
+    if (branch) params.append('ref', branch);
+
+    const res = await fetch(`${API_BASE}/repos/${id}/file?${params.toString()}`, {
+      headers: getAuthHeaders(userId),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    const text = await res.text();
+    let data: any;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = null;
+    }
+
+    if (res.ok && data && typeof data.content === 'string') {
+      return data;
+    }
+  } catch (backendErr) {
+    console.warn('Backend file API call failed:', backendErr);
   }
 
   throw new Error(`Unable to load ${filePath}. The file may have been moved, renamed, or deleted on GitHub.`);

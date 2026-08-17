@@ -53,6 +53,14 @@ app.get('/health', (req: Request, res: Response) => {
   res.redirect('/api/health');
 });
 
+// 404 JSON Catch-All Handler
+app.use((req: Request, res: Response) => {
+  res.status(404).json({
+    error: `Endpoint not found: [${req.method}] ${req.path}`,
+    code: 'NOT_FOUND',
+  });
+});
+
 // Global Error Handler
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   console.error('[Unhandled Error]', err);

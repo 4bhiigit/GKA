@@ -117,7 +117,19 @@ export async function fetchRepoFile(
     headers: getAuthHeaders(userId),
   });
 
-  const data = await res.json();
+  const text = await res.text();
+  let data: any;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    if (!res.ok) {
+      const error: any = new Error(`Backend is updating on Render (HTTP ${res.status}). Please wait ~30 seconds and click again.`);
+      error.status = res.status;
+      throw error;
+    }
+    data = { content: text, path: filePath, size: text.length, encoding: 'utf-8', language: 'text', isBinary: false };
+  }
+
   if (!res.ok) {
     const error: any = new Error(data.error || 'Failed to fetch file content');
     error.status = res.status;

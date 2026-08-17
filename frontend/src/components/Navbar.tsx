@@ -16,6 +16,38 @@ interface NavbarProps {
   onLogout: () => void;
 }
 
+const UserAvatar: React.FC<{ username: string; avatarUrl?: string; className?: string }> = ({
+  username,
+  avatarUrl,
+  className = 'w-6 h-6',
+}) => {
+  const [hasError, setHasError] = useState(false);
+  const primarySrc = avatarUrl && avatarUrl.startsWith('http')
+    ? avatarUrl
+    : `https://avatars.githubusercontent.com/${username}`;
+
+  if (hasError || !username) {
+    return (
+      <div
+        className={`${className} rounded-full bg-gradient-to-tr from-zinc-800 to-zinc-700 border border-zinc-600 flex items-center justify-center text-white text-[10px] font-bold shrink-0 shadow-inner`}
+      >
+        {username ? username.slice(0, 2).toUpperCase() : 'GH'}
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={primarySrc}
+      alt={username}
+      referrerPolicy="no-referrer"
+      crossOrigin="anonymous"
+      className={`${className} rounded-full border border-zinc-750 object-cover bg-zinc-800 shrink-0`}
+      onError={() => setHasError(true)}
+    />
+  );
+};
+
 export const Navbar: React.FC<NavbarProps> = ({
   repositories,
   activeRepo,
@@ -58,64 +90,64 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="flex items-center gap-2">
           {repositories.length > 0 && (
             <div className="relative flex items-center">
-              <GitBranch className="w-3.5 h-3.5 text-zinc-400 absolute left-2.5 pointer-events-none" />
               <select
-                id="active-repo-select"
-                aria-label="Active Repository"
-                className="bg-zinc-900 border border-zinc-800 text-zinc-200 text-xs rounded-lg pl-8 pr-7 py-1.5 focus:outline-none focus:border-zinc-500 transition-colors cursor-pointer max-w-[180px] sm:max-w-[240px] truncate font-mono"
                 value={activeRepo?.id || ''}
                 onChange={(e) => {
                   const selected = repositories.find((r) => r.id === e.target.value);
                   if (selected) onSelectRepo(selected);
                 }}
+                className="bg-zinc-900 border border-zinc-800 text-zinc-200 text-xs rounded-lg px-3 py-1.5 pr-8 appearance-none cursor-pointer hover:border-zinc-700 transition-colors max-w-[200px] sm:max-w-[260px] truncate focus:outline-none focus:ring-1 focus:ring-zinc-600"
               >
                 {repositories.map((repo) => (
                   <option key={repo.id} value={repo.id}>
-                    {repo.owner}/{repo.name} {repo.isPrivate ? '🔒' : ''}
+                    {repo.owner}/{repo.name} ({repo.defaultBranch})
                   </option>
                 ))}
               </select>
+              <div className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500">
+                <GitBranch className="w-3.5 h-3.5" />
+              </div>
             </div>
           )}
 
-          {activeRepo?.status === 'ready' && onOpenArchitecture && (
+          {activeRepo && onOpenArchitecture && (
             <button
               onClick={onOpenArchitecture}
-              className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 rounded-lg text-zinc-300 transition-all"
-              title="Architecture Overview"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-zinc-300 transition-colors shadow-sm"
+              title="Architecture Map & Summary"
             >
-              <Database className="w-3 h-3 text-zinc-300" />
-              <span>Architecture</span>
+              <Database className="w-3.5 h-3.5 text-zinc-400" />
+              <span className="hidden sm:inline">Architecture</span>
             </button>
           )}
         </div>
 
-        {/* Right: Model Selector, Import Button, & GitHub Auth */}
+        {/* Right: Controls & Profile */}
         <div className="flex items-center gap-2.5">
           {/* Provider Toggle */}
-          <div className="flex items-center p-0.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs font-medium">
+          <div className="flex items-center bg-zinc-900 border border-zinc-800 p-0.5 rounded-lg text-xs">
             <button
               onClick={() => onChangeProvider('groq')}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-md transition-all ${
+              className={`flex items-center gap-1 px-2 py-1 rounded-md transition-all font-medium ${
                 selectedProvider === 'groq'
-                  ? 'bg-white text-black font-semibold shadow-sm'
+                  ? 'bg-zinc-800 text-white shadow-sm'
                   : 'text-zinc-400 hover:text-zinc-200'
               }`}
-              title="Groq (Ultra-Fast 120B Model)"
+              title="Groq Ultra-Fast LLaMA-3.3 70B"
             >
-              <Zap className="w-3 h-3" />
+              <Zap className="w-3 h-3 text-white" />
               <span>Groq</span>
             </button>
             <button
               onClick={() => onChangeProvider('gemini')}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-md transition-all ${
+              className={`flex items-center gap-1 px-2 py-1 rounded-md transition-all font-medium ${
                 selectedProvider === 'gemini'
-                  ? 'bg-white text-black font-semibold shadow-sm'
+                  ? 'bg-zinc-800 text-white shadow-sm'
                   : 'text-zinc-400 hover:text-zinc-200'
               }`}
-              title="Google Gemini Flash"
+              title="Google Gemini 2.0 Flash"
             >
-              <Sparkles className="w-3 h-3" />
+              <Sparkles className="w-3 h-3 text-white" />
               <span>Gemini</span>
             </button>
           </div>
@@ -137,18 +169,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div className="relative">
               <button
                 onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-zinc-900 border border-zinc-800 transition-colors"
+                className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-zinc-900 border border-zinc-800 transition-colors"
               >
-                <img
-                  src={user.avatarUrl || `https://github.com/${user.username}.png`}
-                  alt={user.username}
-                  referrerPolicy="no-referrer"
-                  className="w-5 h-5 rounded-full border border-zinc-700 object-cover bg-zinc-800 shrink-0"
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement;
-                    target.src = `https://github.com/${user.username}.png`;
-                  }}
-                />
+                <UserAvatar username={user.username} avatarUrl={user.avatarUrl} className="w-6 h-6" />
                 <span className="text-xs font-medium text-zinc-200 hidden md:inline max-w-[120px] truncate">
                   {user.username}
                 </span>
@@ -156,10 +179,13 @@ export const Navbar: React.FC<NavbarProps> = ({
 
               {/* User Dropdown Menu */}
               {isUserMenuOpen && (
-                <div className="absolute right-0 mt-2 w-48 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl py-1 z-50 animate-fade-in">
-                  <div className="px-3 py-2 border-b border-zinc-800">
-                    <p className="text-xs font-semibold text-white truncate">{user.name || user.username}</p>
-                    <p className="text-[10px] text-zinc-500 font-mono truncate">@{user.username}</p>
+                <div className="absolute right-0 mt-2 w-52 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl py-1 z-50 animate-fade-in">
+                  <div className="px-3 py-2 border-b border-zinc-800 flex items-center gap-2.5">
+                    <UserAvatar username={user.username} avatarUrl={user.avatarUrl} className="w-8 h-8" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold text-white truncate">{user.name || user.username}</p>
+                      <p className="text-[10px] text-zinc-500 font-mono truncate">@{user.username}</p>
+                    </div>
                   </div>
                   <button
                     onClick={() => {

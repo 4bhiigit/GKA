@@ -61,7 +61,7 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({
     setIsLoading(true);
     setError(null);
 
-    fetchRepoFile(repoId, filePath, defaultBranch, userId)
+    fetchRepoFile(repoId, filePath, defaultBranch, userId, owner, repoName)
       .then((data) => {
         if (!isCancelled) {
           setFileData(data);

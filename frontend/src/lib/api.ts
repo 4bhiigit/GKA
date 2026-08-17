@@ -107,36 +107,88 @@ export async function fetchRepoFiles(id: string): Promise<FileNode[]> {
 export async function fetchRepoFile(
   id: string,
   filePath: string,
-  branch?: string,
-  userId?: string
+  branch: string = 'main',
+  userId?: string,
+  owner?: string,
+  repoName?: string
 ): Promise<RepoFileContent> {
-  const params = new URLSearchParams({ path: filePath });
-  if (branch) params.append('ref', branch);
+  const language = detectLanguageFromPath(filePath);
 
-  const res = await fetch(`${API_BASE}/repos/${id}/file?${params.toString()}`, {
-    headers: getAuthHeaders(userId),
-  });
-
-  const text = await res.text();
-  let data: any;
+  // 1. Try Backend API endpoint
   try {
-    data = JSON.parse(text);
-  } catch {
-    if (!res.ok) {
-      const error: any = new Error(`Backend is updating on Render (HTTP ${res.status}). Please wait ~30 seconds and click again.`);
-      error.status = res.status;
-      throw error;
+    const params = new URLSearchParams({ path: filePath });
+    if (branch) params.append('ref', branch);
+
+    const res = await fetch(`${API_BASE}/repos/${id}/file?${params.toString()}`, {
+      headers: getAuthHeaders(userId),
+    });
+
+    const text = await res.text();
+    let data: any;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = null;
     }
-    data = { content: text, path: filePath, size: text.length, encoding: 'utf-8', language: 'text', isBinary: false };
+
+    if (res.ok && data && typeof data.content === 'string') {
+      return data;
+    }
+  } catch (backendErr) {
+    console.warn('Backend file API call failed, falling back to direct GitHub CDN:', backendErr);
   }
 
-  if (!res.ok) {
-    const error: any = new Error(data.error || 'Failed to fetch file content');
-    error.status = res.status;
-    error.code = data.code;
-    throw error;
+  // 2. Direct GitHub Raw CDN Fallback (works instantly for all public/indexed repos)
+  if (owner && repoName) {
+    try {
+      const rawUrl = `https://raw.githubusercontent.com/${owner}/${repoName}/${branch}/${filePath}`;
+      const rawRes = await fetch(rawUrl);
+      if (rawRes.ok) {
+        const text = await rawRes.text();
+        return {
+          path: filePath,
+          content: text,
+          size: text.length,
+          encoding: 'utf-8',
+          language,
+          isBinary: false,
+        };
+      }
+    } catch (rawErr) {
+      console.warn('Direct GitHub Raw fetch failed:', rawErr);
+    }
   }
-  return data;
+
+  throw new Error(`Unable to load ${filePath}. The file may have been moved, renamed, or deleted on GitHub.`);
+}
+
+function detectLanguageFromPath(filePath: string): string {
+  const ext = filePath.split('.').pop()?.toLowerCase() || '';
+  const map: Record<string, string> = {
+    ts: 'typescript',
+    tsx: 'tsx',
+    js: 'javascript',
+    jsx: 'jsx',
+    py: 'python',
+    go: 'go',
+    rs: 'rust',
+    java: 'java',
+    c: 'c',
+    cpp: 'cpp',
+    cs: 'csharp',
+    rb: 'ruby',
+    php: 'php',
+    html: 'html',
+    css: 'css',
+    json: 'json',
+    yaml: 'yaml',
+    yml: 'yaml',
+    md: 'markdown',
+    sql: 'sql',
+    sh: 'shell',
+    dockerfile: 'dockerfile',
+  };
+  return map[ext] || 'text';
 }
 
 export async function fetchRepoSummary(id: string): Promise<string> {

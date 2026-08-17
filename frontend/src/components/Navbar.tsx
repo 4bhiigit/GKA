@@ -21,17 +21,18 @@ const UserAvatar: React.FC<{ username: string; avatarUrl?: string; className?: s
   avatarUrl,
   className = 'w-6 h-6',
 }) => {
-  const imgSrc = avatarUrl || `https://avatars.githubusercontent.com/${username}`;
+  const [currentSrc, setCurrentSrc] = useState(
+    `https://images.weserv.nl/?url=github.com/${username}.png&w=80&h=80&fit=cover`
+  );
 
   return (
     <img
-      src={imgSrc}
+      src={currentSrc}
       alt={username}
       className={`${className} rounded-full border border-zinc-700 object-cover bg-zinc-800 shrink-0`}
-      onError={(e) => {
-        const target = e.target as HTMLImageElement;
-        if (!target.src.includes('github.com')) {
-          target.src = `https://github.com/${username}.png`;
+      onError={() => {
+        if (!currentSrc.includes('unavatar.io')) {
+          setCurrentSrc(`https://unavatar.io/github/${username}`);
         }
       }}
     />

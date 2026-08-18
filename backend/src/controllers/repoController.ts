@@ -248,6 +248,8 @@ export class RepoController {
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
+  }
+
   /**
    * GET /api/repos/:id/file
    * Fetch specific raw file content and metadata from GitHub
